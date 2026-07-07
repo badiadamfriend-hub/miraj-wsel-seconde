@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wsel — Connexion</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     body {
@@ -21,16 +22,12 @@
       border-radius: 20px;
       padding: 36px 30px;
       box-shadow: 0 20px 50px rgba(0,0,0,.25);
+      transition: max-width .3s;
     }
+    .carte.large { max-width: 620px; }
     .logo { text-align: center; font-size: 40px; margin-bottom: 6px; }
     h1 { text-align: center; font-size: 22px; color: #1e1b4b; margin-bottom: 4px; }
     .sous { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
-    .onglets { display: flex; background: #f3f4f6; border-radius: 12px; padding: 4px; margin-bottom: 22px; }
-    .onglets button {
-      flex: 1; border: none; background: none; padding: 10px; border-radius: 9px;
-      font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; transition: .2s;
-    }
-    .onglets button.actif { background: #fff; color: #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
     label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 14px 0 6px; }
     input {
       width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px;
@@ -46,25 +43,35 @@
     .message { text-align: center; font-size: 13px; margin-top: 14px; min-height: 18px; }
     .message.erreur { color: #dc2626; }
     .message.ok { color: #16a34a; }
+
     /* Ecran connecté */
-    #espace { text-align: center; display: none; }
-    #espace .avatar {
-      width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 16px;
+    #espace { display: none; }
+    .entete { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .avatar {
+      width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
       background: linear-gradient(135deg, #4f46e5, #db2777); color: #fff;
-      display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700;
     }
-    #espace h2 { color: #1e1b4b; margin-bottom: 6px; }
-    #espace p { color: #6b7280; font-size: 14px; margin-bottom: 22px; word-break: break-all; }
+    .entete .infos { flex: 1; min-width: 0; }
+    .entete .infos strong { display: block; color: #1e1b4b; font-size: 15px; }
+    .entete .infos span { color: #6b7280; font-size: 12px; word-break: break-all; }
     .deco {
-      padding: 11px 22px; border: 1.5px solid #e5e7eb; background: #fff; color: #374151;
-      border-radius: 10px; font-weight: 600; cursor: pointer; transition: .2s;
+      padding: 8px 14px; border: 1.5px solid #e5e7eb; background: #fff; color: #374151;
+      border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: .2s;
     }
     .deco:hover { background: #f9fafb; }
+    #zone {
+      width: 100%; min-height: 260px; padding: 14px; border: 1.5px solid #e5e7eb;
+      border-radius: 12px; font-size: 15px; line-height: 1.6; resize: vertical;
+    }
+    #zone:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
+    .statut { font-size: 12px; color: #9ca3af; margin-top: 8px; text-align: right; min-height: 16px; }
+    .statut.enregistre { color: #16a34a; }
   </style>
 </head>
 <body>
-  <div class="carte">
-    <!-- Formulaire connexion / inscription -->
+  <div class="carte" id="carte">
+    <!-- Formulaire de connexion -->
     <div id="formulaire">
       <div class="logo">🔐</div>
       <h1>Wsel</h1>
@@ -80,25 +87,38 @@
       <div class="message" id="message"></div>
     </div>
 
-    <!-- Ecran une fois connecté -->
+    <!-- Espace de travail (une fois connecté) -->
     <div id="espace">
-      <div class="avatar" id="avatar">?</div>
-      <h2>Bienvenue 👋</h2>
-      <p id="emailConnecte"></p>
-      <button class="deco" onclick="deconnexion()">Se déconnecter</button>
+      <div class="entete">
+        <div class="avatar" id="avatar">?</div>
+        <div class="infos">
+          <strong>Mon espace</strong>
+          <span id="emailConnecte"></span>
+        </div>
+        <button class="deco" onclick="deconnexion()">Déconnexion</button>
+      </div>
+      <textarea id="zone" placeholder="Écris ici… tout est enregistré automatiquement et se retrouve sur tous tes appareils."></textarea>
+      <div class="statut" id="statut"></div>
     </div>
   </div>
 
   <script>
     // ====================================================================
-    //  LES COMPTES  (les mêmes partout : PC, téléphone, etc.)
-    //  Pour changer un e-mail ou un mot de passe, il suffit de modifier
-    //  les lignes ci-dessous.
+    //  LES COMPTES  (les mêmes partout : PC, téléphone…)
+    //  Pour changer un e-mail / mot de passe, modifie les lignes ci-dessous.
     // ====================================================================
     const COMPTES = {
       "badiadamfriend@gmail.com": "adam2026",
       "compte2@wsel.com":         "wsel2026"
     };
+
+    // ------- Connexion à la mémoire partagée (Supabase) -------
+    const SUPABASE_URL = "https://ltnfhozhlofqyuqgreyg.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_d3nLNF-STnFnEBjy8atwcw_9FNf2KzL";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let emailActuel = null;
+    let minuteur = null;
 
     function afficherMessage(texte, type) {
       const m = document.getElementById("message");
@@ -109,7 +129,6 @@
     function valider() {
       const email = document.getElementById("email").value.trim().toLowerCase();
       const mdp = document.getElementById("motdepasse").value;
-
       if (!email || !mdp) { afficherMessage("Remplis tous les champs.", "erreur"); return; }
       if (COMPTES[email] === undefined) { afficherMessage("Aucun compte avec cet e-mail.", "erreur"); return; }
       if (COMPTES[email] !== mdp) { afficherMessage("Mot de passe incorrect.", "erreur"); return; }
@@ -123,23 +142,69 @@
 
     function deconnexion() {
       localStorage.removeItem("wsel_connecte");
+      emailActuel = null;
       document.getElementById("email").value = "";
       document.getElementById("motdepasse").value = "";
+      document.getElementById("zone").value = "";
+      document.getElementById("carte").classList.remove("large");
       document.getElementById("formulaire").style.display = "block";
       document.getElementById("espace").style.display = "none";
       afficherMessage("", "");
     }
 
-    function afficherEspace(email) {
+    async function afficherEspace(email) {
+      emailActuel = email;
       document.getElementById("formulaire").style.display = "none";
       document.getElementById("espace").style.display = "block";
+      document.getElementById("carte").classList.add("large");
       document.getElementById("emailConnecte").textContent = email;
       document.getElementById("avatar").textContent = email[0].toUpperCase();
+      await chargerContenu();
     }
+
+    // ------- Charger le contenu depuis la mémoire partagée -------
+    async function chargerContenu() {
+      const statut = document.getElementById("statut");
+      statut.textContent = "Chargement…";
+      statut.className = "statut";
+      const { data, error } = await db.from("espace").select("contenu").eq("email", emailActuel).maybeSingle();
+      if (error) { statut.textContent = "⚠️ Erreur de connexion à la mémoire."; return; }
+      document.getElementById("zone").value = (data && data.contenu) ? data.contenu : "";
+      statut.textContent = "À jour ✓";
+      statut.className = "statut enregistre";
+    }
+
+    // ------- Enregistrer (automatiquement, 0,8 s après avoir arrêté d'écrire) -------
+    function planifierEnregistrement() {
+      const statut = document.getElementById("statut");
+      statut.textContent = "…";
+      statut.className = "statut";
+      clearTimeout(minuteur);
+      minuteur = setTimeout(enregistrer, 800);
+    }
+
+    async function enregistrer() {
+      if (!emailActuel) return;
+      const statut = document.getElementById("statut");
+      const contenu = document.getElementById("zone").value;
+      const { error } = await db.from("espace").upsert({
+        email: emailActuel, contenu: contenu, updated_at: new Date().toISOString()
+      });
+      if (error) { statut.textContent = "⚠️ Pas enregistré (vérifie ta connexion)."; statut.className = "statut"; return; }
+      statut.textContent = "Enregistré ✓";
+      statut.className = "statut enregistre";
+    }
+
+    document.getElementById("zone").addEventListener("input", planifierEnregistrement);
+
+    // Quand tu reviens sur la page (ex: tu repasses du PC au tél), on recharge le dernier contenu
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && emailActuel) chargerContenu();
+    });
 
     // Si déjà connecté, on va direct sur l'espace
     const dejaConnecte = localStorage.getItem("wsel_connecte");
-    if (dejaConnecte) afficherEspace(dejaConnecte);
+    if (dejaConnecte && COMPTES[dejaConnecte] !== undefined) afficherEspace(dejaConnecte);
   </script>
 </body>
 </html>
