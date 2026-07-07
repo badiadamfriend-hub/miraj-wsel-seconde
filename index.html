@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wsel — Connexion</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+      padding: 20px;
+    }
+    .carte {
+      background: #fff;
+      width: 100%;
+      max-width: 400px;
+      border-radius: 20px;
+      padding: 36px 30px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    }
+    .logo { text-align: center; font-size: 40px; margin-bottom: 6px; }
+    h1 { text-align: center; font-size: 22px; color: #1e1b4b; margin-bottom: 4px; }
+    .sous { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+    .onglets { display: flex; background: #f3f4f6; border-radius: 12px; padding: 4px; margin-bottom: 22px; }
+    .onglets button {
+      flex: 1; border: none; background: none; padding: 10px; border-radius: 9px;
+      font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; transition: .2s;
+    }
+    .onglets button.actif { background: #fff; color: #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 14px 0 6px; }
+    input {
+      width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px;
+      font-size: 15px; transition: .2s;
+    }
+    input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
+    .principal {
+      width: 100%; margin-top: 22px; padding: 13px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff;
+      font-size: 15px; font-weight: 700; cursor: pointer; transition: .2s;
+    }
+    .principal:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(124,58,237,.35); }
+    .message { text-align: center; font-size: 13px; margin-top: 14px; min-height: 18px; }
+    .message.erreur { color: #dc2626; }
+    .message.ok { color: #16a34a; }
+    /* Ecran connecté */
+    #espace { text-align: center; display: none; }
+    #espace .avatar {
+      width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 16px;
+      background: linear-gradient(135deg, #4f46e5, #db2777); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;
+    }
+    #espace h2 { color: #1e1b4b; margin-bottom: 6px; }
+    #espace p { color: #6b7280; font-size: 14px; margin-bottom: 22px; word-break: break-all; }
+    .deco {
+      padding: 11px 22px; border: 1.5px solid #e5e7eb; background: #fff; color: #374151;
+      border-radius: 10px; font-weight: 600; cursor: pointer; transition: .2s;
+    }
+    .deco:hover { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="carte">
+    <!-- Formulaire connexion / inscription -->
+    <div id="formulaire">
+      <div class="logo">🔐</div>
+      <h1>Wsel</h1>
+      <p class="sous">Connecte-toi pour accéder à ton espace</p>
+
+      <div class="onglets">
+        <button id="ongletConnexion" class="actif" onclick="changerMode('connexion')">Se connecter</button>
+        <button id="ongletInscription" onclick="changerMode('inscription')">S'inscrire</button>
+      </div>
+
+      <label for="email">Adresse e-mail</label>
+      <input type="email" id="email" placeholder="ton@email.com" autocomplete="email" />
+
+      <label for="motdepasse">Mot de passe</label>
+      <input type="password" id="motdepasse" placeholder="••••••••" autocomplete="current-password" />
+
+      <div id="champConfirmation" style="display:none;">
+        <label for="confirmation">Confirmer le mot de passe</label>
+        <input type="password" id="confirmation" placeholder="••••••••" autocomplete="new-password" />
+      </div>
+
+      <button class="principal" id="boutonPrincipal" onclick="valider()">Se connecter</button>
+      <div class="message" id="message"></div>
+    </div>
+
+    <!-- Ecran une fois connecté -->
+    <div id="espace">
+      <div class="avatar" id="avatar">?</div>
+      <h2>Bienvenue 👋</h2>
+      <p id="emailConnecte"></p>
+      <button class="deco" onclick="deconnexion()">Se déconnecter</button>
+    </div>
+  </div>
+
+  <script>
+    // ------- "Base de données" simple, stockée dans le navigateur -------
+    function getUtilisateurs() {
+      return JSON.parse(localStorage.getItem("wsel_utilisateurs") || "{}");
+    }
+    function sauverUtilisateurs(u) {
+      localStorage.setItem("wsel_utilisateurs", JSON.stringify(u));
+    }
+
+    let mode = "connexion";
+
+    function changerMode(nouveau) {
+      mode = nouveau;
+      document.getElementById("ongletConnexion").classList.toggle("actif", mode === "connexion");
+      document.getElementById("ongletInscription").classList.toggle("actif", mode === "inscription");
+      document.getElementById("champConfirmation").style.display = mode === "inscription" ? "block" : "none";
+      document.getElementById("boutonPrincipal").textContent = mode === "inscription" ? "Créer mon compte" : "Se connecter";
+      afficherMessage("", "");
+    }
+
+    function afficherMessage(texte, type) {
+      const m = document.getElementById("message");
+      m.textContent = texte;
+      m.className = "message " + type;
+    }
+
+    function valider() {
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      const mdp = document.getElementById("motdepasse").value;
+      const utilisateurs = getUtilisateurs();
+
+      if (!email || !mdp) { afficherMessage("Remplis tous les champs.", "erreur"); return; }
+      if (!email.includes("@")) { afficherMessage("Adresse e-mail invalide.", "erreur"); return; }
+
+      if (mode === "inscription") {
+        const confirmation = document.getElementById("confirmation").value;
+        if (mdp.length < 4) { afficherMessage("Mot de passe : 4 caractères minimum.", "erreur"); return; }
+        if (mdp !== confirmation) { afficherMessage("Les mots de passe ne correspondent pas.", "erreur"); return; }
+        if (utilisateurs[email]) { afficherMessage("Ce compte existe déjà. Connecte-toi.", "erreur"); return; }
+        utilisateurs[email] = mdp;
+        sauverUtilisateurs(utilisateurs);
+        afficherMessage("Compte créé ! Connexion...", "ok");
+        setTimeout(() => connecter(email), 700);
+      } else {
+        if (!utilisateurs[email]) { afficherMessage("Aucun compte avec cet e-mail.", "erreur"); return; }
+        if (utilisateurs[email] !== mdp) { afficherMessage("Mot de passe incorrect.", "erreur"); return; }
+        connecter(email);
+      }
+    }
+
+    function connecter(email) {
+      localStorage.setItem("wsel_connecte", email);
+      afficherEspace(email);
+    }
+
+    function deconnexion() {
+      localStorage.removeItem("wsel_connecte");
+      document.getElementById("email").value = "";
+      document.getElementById("motdepasse").value = "";
+      document.getElementById("confirmation").value = "";
+      document.getElementById("formulaire").style.display = "block";
+      document.getElementById("espace").style.display = "none";
+      changerMode("connexion");
+    }
+
+    function afficherEspace(email) {
+      document.getElementById("formulaire").style.display = "none";
+      document.getElementById("espace").style.display = "block";
+      document.getElementById("emailConnecte").textContent = email;
+      document.getElementById("avatar").textContent = email[0].toUpperCase();
+    }
+
+    // Si déjà connecté, on va direct sur l'espace
+    const dejaConnecte = localStorage.getItem("wsel_connecte");
+    if (dejaConnecte) afficherEspace(dejaConnecte);
+  </script>
+</body>
+</html>
