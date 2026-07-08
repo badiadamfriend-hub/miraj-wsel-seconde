@@ -118,6 +118,20 @@
       <div class="message" id="messageReinit"></div>
     </div>
 
+    <!-- Ecran : mot de passe oublié (saisir son e-mail) -->
+    <div id="oubliMdp" style="display:none;">
+      <div class="logo">🔑</div>
+      <h1>Mot de passe oublié</h1>
+      <p class="sous">Écris ton e-mail, on t'envoie un lien pour le changer</p>
+      <label for="emailOubli">Adresse e-mail</label>
+      <input type="email" id="emailOubli" placeholder="ton@email.com" autocomplete="email" />
+      <button class="principal" onclick="envoyerReset()">Envoyer le lien</button>
+      <div class="message" id="messageOubli"></div>
+      <div style="text-align:center; margin-top:14px;">
+        <a href="#" onclick="retourConnexion(); return false;" style="color:#7c3aed; font-size:13px; font-weight:600; text-decoration:none;">← Retour</a>
+      </div>
+    </div>
+
     <!-- Espace de travail (une fois connecté) -->
     <div id="espace">
       <div class="entete">
@@ -183,8 +197,9 @@
           if (data.session) {
             connecter(data.user.email);   // e-mail déjà confirmé
           } else {
-            afficherMessage("Compte créé ! ✉️ Va confirmer ton e-mail (regarde tes mails + les spams), puis connecte-toi.", "ok");
             changerMode("connexion");
+            afficherMessage("Compte créé ! ✅ On ouvre Gmail : clique le lien de confirmation, puis reviens ici te connecter.", "ok");
+            window.open("https://mail.google.com", "_blank");
           }
         } else {
           const { data, error } = await db.auth.signInWithPassword({ email: email, password: mdp });
@@ -194,8 +209,8 @@
             else afficherMessage("E-mail ou mot de passe incorrect.", "erreur");
             return;
           }
-          // Connexion réussie → redirection vers Gmail
-          window.location.href = "https://mail.google.com";
+          // Connexion réussie → on ouvre l'espace de travail
+          connecter(data.user.email);
         }
       } finally {
         bouton.disabled = false;
@@ -204,8 +219,27 @@
 
     // ------- Mot de passe oublié -------
     function motDePasseOublie() {
-      // Redirige vers Gmail (là où l'utilisateur écrit / consulte ses e-mails)
-      window.location.href = "https://mail.google.com";
+      document.getElementById("emailOubli").value = document.getElementById("email").value.trim();
+      document.getElementById("messageOubli").textContent = "";
+      document.getElementById("formulaire").style.display = "none";
+      document.getElementById("oubliMdp").style.display = "block";
+    }
+
+    function retourConnexion() {
+      document.getElementById("oubliMdp").style.display = "none";
+      document.getElementById("formulaire").style.display = "block";
+      changerMode("connexion");
+    }
+
+    async function envoyerReset() {
+      const email = document.getElementById("emailOubli").value.trim().toLowerCase();
+      const msg = document.getElementById("messageOubli");
+      if (!email || !email.includes("@")) { msg.textContent = "Écris ton e-mail."; msg.className = "message erreur"; return; }
+      const retour = window.location.href.split("#")[0].split("?")[0];
+      const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: retour });
+      if (error) { msg.textContent = "Erreur : " + error.message; msg.className = "message erreur"; return; }
+      msg.textContent = "✉️ Message envoyé ! Va sur ton mail (+ spams) et clique le lien.";
+      msg.className = "message ok";
     }
 
     async function changerMotDePasse() {
@@ -289,23 +323,33 @@
       if (!document.hidden && emailActuel) chargerContenu();
     });
 
-    // Détecte si on revient d'un lien "mot de passe oublié"
-    const estRecuperation = window.location.hash.includes("type=recovery");
+    // Détecte d'où on revient (lien reçu par e-mail)
+    const hash = window.location.hash;
+    const estRecuperation = hash.includes("type=recovery");   // lien "mot de passe oublié"
+    const estConfirmation = hash.includes("type=signup");     // lien de confirmation d'inscription
 
     function afficherReinit() {
       document.getElementById("formulaire").style.display = "none";
+      document.getElementById("oubliMdp").style.display = "none";
       document.getElementById("espace").style.display = "none";
       document.getElementById("reinit").style.display = "block";
     }
 
-    // Si déjà connecté (ou retour d'un lien de confirmation d'e-mail), on entre direct
-    db.auth.getSession().then(({ data }) => {
-      if (estRecuperation) return;   // on laisse l'écran "nouveau mot de passe"
+    db.auth.getSession().then(async ({ data }) => {
+      if (estRecuperation) return;               // on laisse l'écran "nouveau mot de passe"
+      if (estConfirmation) {                     // retour du lien de confirmation → page de connexion
+        await db.auth.signOut();
+        window.location.hash = "";
+        changerMode("connexion");
+        afficherMessage("✅ E-mail confirmé ! Connecte-toi maintenant.", "ok");
+        return;
+      }
       if (data.session) afficherEspace(data.session.user.email);
     });
     db.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") afficherReinit();
-      else if (event === "SIGNED_IN" && session && !emailActuel && !estRecuperation) afficherEspace(session.user.email);
+      else if (event === "SIGNED_IN" && session && !emailActuel && !estRecuperation && !estConfirmation)
+        afficherEspace(session.user.email);
     });
   </script>
 </body>
