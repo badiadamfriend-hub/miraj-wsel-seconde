@@ -102,6 +102,20 @@
 
       <button class="principal" id="boutonPrincipal" onclick="valider()">Se connecter</button>
       <div class="message" id="message"></div>
+      <div id="lienOubli" style="text-align:center; margin-top:14px;">
+        <a href="#" onclick="motDePasseOublie(); return false;" style="color:#7c3aed; font-size:13px; font-weight:600; text-decoration:none;">Mot de passe oublié ?</a>
+      </div>
+    </div>
+
+    <!-- Ecran : choisir un nouveau mot de passe -->
+    <div id="reinit" style="display:none;">
+      <div class="logo">🔑</div>
+      <h1>Nouveau mot de passe</h1>
+      <p class="sous">Choisis ton nouveau mot de passe</p>
+      <label for="nouveauMdp">Nouveau mot de passe</label>
+      <input type="password" id="nouveauMdp" placeholder="••••••••" autocomplete="new-password" />
+      <button class="principal" onclick="changerMotDePasse()">Enregistrer</button>
+      <div class="message" id="messageReinit"></div>
     </div>
 
     <!-- Espace de travail (une fois connecté) -->
@@ -134,6 +148,7 @@
       document.getElementById("ongletConnexion").classList.toggle("actif", mode === "connexion");
       document.getElementById("ongletInscription").classList.toggle("actif", mode === "inscription");
       document.getElementById("champConfirmation").style.display = mode === "inscription" ? "block" : "none";
+      document.getElementById("lienOubli").style.display = mode === "connexion" ? "block" : "none";
       document.getElementById("boutonPrincipal").textContent = mode === "inscription" ? "Créer mon compte" : "Se connecter";
       afficherMessage("", "");
     }
@@ -184,6 +199,33 @@
       } finally {
         bouton.disabled = false;
       }
+    }
+
+    // ------- Mot de passe oublié -------
+    async function motDePasseOublie() {
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      if (!email || !email.includes("@")) {
+        afficherMessage("Écris d'abord ton e-mail dans la case au-dessus, puis reclique ici.", "erreur");
+        return;
+      }
+      const retour = window.location.href.split("#")[0].split("?")[0];
+      const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: retour });
+      if (error) { afficherMessage("Erreur : " + error.message, "erreur"); return; }
+      afficherMessage("✉️ E-mail envoyé ! Regarde tes mails (+ spams) pour choisir un nouveau mot de passe.", "ok");
+    }
+
+    async function changerMotDePasse() {
+      const nv = document.getElementById("nouveauMdp").value;
+      const msg = document.getElementById("messageReinit");
+      if (nv.length < 6) { msg.textContent = "6 caractères minimum."; msg.className = "message erreur"; return; }
+      const { data, error } = await db.auth.updateUser({ password: nv });
+      if (error) { msg.textContent = "Erreur : " + error.message; msg.className = "message erreur"; return; }
+      msg.textContent = "Mot de passe changé ! Connexion…"; msg.className = "message ok";
+      setTimeout(() => {
+        document.getElementById("reinit").style.display = "none";
+        window.location.hash = "";
+        afficherEspace(data.user.email);
+      }, 800);
     }
 
     function connecter(email) {
@@ -253,12 +295,23 @@
       if (!document.hidden && emailActuel) chargerContenu();
     });
 
+    // Détecte si on revient d'un lien "mot de passe oublié"
+    const estRecuperation = window.location.hash.includes("type=recovery");
+
+    function afficherReinit() {
+      document.getElementById("formulaire").style.display = "none";
+      document.getElementById("espace").style.display = "none";
+      document.getElementById("reinit").style.display = "block";
+    }
+
     // Si déjà connecté (ou retour d'un lien de confirmation d'e-mail), on entre direct
     db.auth.getSession().then(({ data }) => {
+      if (estRecuperation) return;   // on laisse l'écran "nouveau mot de passe"
       if (data.session) afficherEspace(data.session.user.email);
     });
     db.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session && !emailActuel) afficherEspace(session.user.email);
+      if (event === "PASSWORD_RECOVERY") afficherReinit();
+      else if (event === "SIGNED_IN" && session && !emailActuel && !estRecuperation) afficherEspace(session.user.email);
     });
   </script>
 </body>
