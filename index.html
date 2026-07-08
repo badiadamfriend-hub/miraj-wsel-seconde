@@ -188,7 +188,11 @@
           if (mdp.length < 6) { afficherMessage("Mot de passe : 6 caractères minimum.", "erreur"); return; }
           if (mdp !== confirmation) { afficherMessage("Les mots de passe ne correspondent pas.", "erreur"); return; }
 
-          const { data, error } = await db.auth.signUp({ email: email, password: mdp });
+          const retourConfirm = window.location.href.split("#")[0].split("?")[0];
+          const { data, error } = await db.auth.signUp({
+            email: email, password: mdp,
+            options: { emailRedirectTo: retourConfirm }
+          });
           if (error) {
             if (error.message.includes("already")) afficherMessage("Ce compte existe déjà. Connecte-toi.", "erreur");
             else afficherMessage("Erreur : " + error.message, "erreur");
