@@ -156,25 +156,30 @@
       try {
         if (mode === "inscription") {
           const confirmation = document.getElementById("confirmation").value;
-          if (mdp.length < 4) { afficherMessage("Mot de passe : 4 caractères minimum.", "erreur"); return; }
+          if (mdp.length < 6) { afficherMessage("Mot de passe : 6 caractères minimum.", "erreur"); return; }
           if (mdp !== confirmation) { afficherMessage("Les mots de passe ne correspondent pas.", "erreur"); return; }
 
-          // Le compte existe déjà ?
-          const { data: existant, error: e1 } = await db.from("comptes").select("email").eq("email", email).maybeSingle();
-          if (e1) { afficherMessage("Erreur de connexion. Réessaie.", "erreur"); return; }
-          if (existant) { afficherMessage("Ce compte existe déjà. Connecte-toi.", "erreur"); return; }
-
-          // On crée le compte
-          const { error: e2 } = await db.from("comptes").insert({ email: email, motdepasse: mdp });
-          if (e2) { afficherMessage("Erreur à la création. Réessaie.", "erreur"); return; }
-          afficherMessage("Compte créé ! Connexion…", "ok");
-          setTimeout(() => connecter(email), 600);
+          const { data, error } = await db.auth.signUp({ email: email, password: mdp });
+          if (error) {
+            if (error.message.includes("already")) afficherMessage("Ce compte existe déjà. Connecte-toi.", "erreur");
+            else afficherMessage("Erreur : " + error.message, "erreur");
+            return;
+          }
+          if (data.session) {
+            connecter(data.user.email);   // e-mail déjà confirmé
+          } else {
+            afficherMessage("Compte créé ! ✉️ Va confirmer ton e-mail (regarde tes mails + les spams), puis connecte-toi.", "ok");
+            changerMode("connexion");
+          }
         } else {
-          const { data, error } = await db.from("comptes").select("motdepasse").eq("email", email).maybeSingle();
-          if (error) { afficherMessage("Erreur de connexion. Réessaie.", "erreur"); return; }
-          if (!data) { afficherMessage("Aucun compte avec cet e-mail.", "erreur"); return; }
-          if (data.motdepasse !== mdp) { afficherMessage("Mot de passe incorrect.", "erreur"); return; }
-          connecter(email);
+          const { data, error } = await db.auth.signInWithPassword({ email: email, password: mdp });
+          if (error) {
+            if (error.message.toLowerCase().includes("not confirmed"))
+              afficherMessage("Confirme d'abord ton e-mail (regarde tes mails).", "erreur");
+            else afficherMessage("E-mail ou mot de passe incorrect.", "erreur");
+            return;
+          }
+          connecter(data.user.email);
         }
       } finally {
         bouton.disabled = false;
@@ -182,12 +187,11 @@
     }
 
     function connecter(email) {
-      localStorage.setItem("wsel_connecte", email);
       afficherEspace(email);
     }
 
-    function deconnexion() {
-      localStorage.removeItem("wsel_connecte");
+    async function deconnexion() {
+      await db.auth.signOut();
       emailActuel = null;
       document.getElementById("email").value = "";
       document.getElementById("motdepasse").value = "";
@@ -249,9 +253,13 @@
       if (!document.hidden && emailActuel) chargerContenu();
     });
 
-    // Si déjà connecté, on va direct sur l'espace
-    const dejaConnecte = localStorage.getItem("wsel_connecte");
-    if (dejaConnecte) afficherEspace(dejaConnecte);
+    // Si déjà connecté (ou retour d'un lien de confirmation d'e-mail), on entre direct
+    db.auth.getSession().then(({ data }) => {
+      if (data.session) afficherEspace(data.session.user.email);
+    });
+    db.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session && !emailActuel) afficherEspace(session.user.email);
+    });
   </script>
 </body>
 </html>
