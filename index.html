@@ -194,7 +194,8 @@
             else afficherMessage("E-mail ou mot de passe incorrect.", "erreur");
             return;
           }
-          connecter(data.user.email);
+          // Connexion réussie → redirection vers Gmail
+          window.location.href = "https://mail.google.com";
         }
       } finally {
         bouton.disabled = false;
@@ -202,16 +203,9 @@
     }
 
     // ------- Mot de passe oublié -------
-    async function motDePasseOublie() {
-      const email = document.getElementById("email").value.trim().toLowerCase();
-      if (!email || !email.includes("@")) {
-        afficherMessage("Écris d'abord ton e-mail dans la case au-dessus, puis reclique ici.", "erreur");
-        return;
-      }
-      const retour = window.location.href.split("#")[0].split("?")[0];
-      const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: retour });
-      if (error) { afficherMessage("Erreur : " + error.message, "erreur"); return; }
-      afficherMessage("✉️ E-mail envoyé ! Regarde tes mails (+ spams) pour choisir un nouveau mot de passe.", "ok");
+    function motDePasseOublie() {
+      // Redirige vers Gmail (là où l'utilisateur écrit / consulte ses e-mails)
+      window.location.href = "https://mail.google.com";
     }
 
     async function changerMotDePasse() {
