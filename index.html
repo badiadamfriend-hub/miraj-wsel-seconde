@@ -28,6 +28,12 @@
     .logo { text-align: center; font-size: 40px; margin-bottom: 6px; }
     h1 { text-align: center; font-size: 22px; color: #1e1b4b; margin-bottom: 4px; }
     .sous { text-align: center; color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+    .onglets { display: flex; background: #f3f4f6; border-radius: 12px; padding: 4px; margin-bottom: 22px; }
+    .onglets button {
+      flex: 1; border: none; background: none; padding: 10px; border-radius: 9px;
+      font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; transition: .2s;
+    }
+    .onglets button.actif { background: #fff; color: #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
     label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 14px 0 6px; }
     input {
       width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px;
@@ -40,6 +46,7 @@
       font-size: 15px; font-weight: 700; cursor: pointer; transition: .2s;
     }
     .principal:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(124,58,237,.35); }
+    .principal:disabled { opacity: .6; cursor: default; transform: none; }
     .message { text-align: center; font-size: 13px; margin-top: 14px; min-height: 18px; }
     .message.erreur { color: #dc2626; }
     .message.ok { color: #16a34a; }
@@ -71,17 +78,27 @@
 </head>
 <body>
   <div class="carte" id="carte">
-    <!-- Formulaire de connexion -->
+    <!-- Formulaire connexion / inscription -->
     <div id="formulaire">
       <div class="logo">🔐</div>
       <h1>Wsel</h1>
-      <p class="sous">Connecte-toi pour accéder à ton espace</p>
+      <p class="sous">Connecte-toi ou crée ton compte</p>
+
+      <div class="onglets">
+        <button id="ongletConnexion" class="actif" onclick="changerMode('connexion')">Se connecter</button>
+        <button id="ongletInscription" onclick="changerMode('inscription')">S'inscrire</button>
+      </div>
 
       <label for="email">Adresse e-mail</label>
       <input type="email" id="email" placeholder="ton@email.com" autocomplete="email" />
 
       <label for="motdepasse">Mot de passe</label>
       <input type="password" id="motdepasse" placeholder="••••••••" autocomplete="current-password" />
+
+      <div id="champConfirmation" style="display:none;">
+        <label for="confirmation">Confirmer le mot de passe</label>
+        <input type="password" id="confirmation" placeholder="••••••••" autocomplete="new-password" />
+      </div>
 
       <button class="principal" id="boutonPrincipal" onclick="valider()">Se connecter</button>
       <div class="message" id="message"></div>
@@ -103,22 +120,23 @@
   </div>
 
   <script>
-    // ====================================================================
-    //  LES COMPTES  (les mêmes partout : PC, téléphone…)
-    //  Pour changer un e-mail / mot de passe, modifie les lignes ci-dessous.
-    // ====================================================================
-    const COMPTES = {
-      "badiadamfriend@gmail.com": "adam2026",
-      "compte2@wsel.com":         "wsel2026"
-    };
-
-    // ------- Connexion à la mémoire partagée (Supabase) -------
+    // ------- Connexion à la base (Supabase) -------
     const SUPABASE_URL = "https://ltnfhozhlofqyuqgreyg.supabase.co";
     const SUPABASE_KEY = "sb_publishable_d3nLNF-STnFnEBjy8atwcw_9FNf2KzL";
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    let mode = "connexion";
     let emailActuel = null;
     let minuteur = null;
+
+    function changerMode(nouveau) {
+      mode = nouveau;
+      document.getElementById("ongletConnexion").classList.toggle("actif", mode === "connexion");
+      document.getElementById("ongletInscription").classList.toggle("actif", mode === "inscription");
+      document.getElementById("champConfirmation").style.display = mode === "inscription" ? "block" : "none";
+      document.getElementById("boutonPrincipal").textContent = mode === "inscription" ? "Créer mon compte" : "Se connecter";
+      afficherMessage("", "");
+    }
 
     function afficherMessage(texte, type) {
       const m = document.getElementById("message");
@@ -126,13 +144,41 @@
       m.className = "message " + type;
     }
 
-    function valider() {
+    async function valider() {
+      const bouton = document.getElementById("boutonPrincipal");
       const email = document.getElementById("email").value.trim().toLowerCase();
       const mdp = document.getElementById("motdepasse").value;
+
       if (!email || !mdp) { afficherMessage("Remplis tous les champs.", "erreur"); return; }
-      if (COMPTES[email] === undefined) { afficherMessage("Aucun compte avec cet e-mail.", "erreur"); return; }
-      if (COMPTES[email] !== mdp) { afficherMessage("Mot de passe incorrect.", "erreur"); return; }
-      connecter(email);
+      if (!email.includes("@")) { afficherMessage("Adresse e-mail invalide.", "erreur"); return; }
+
+      bouton.disabled = true;
+      try {
+        if (mode === "inscription") {
+          const confirmation = document.getElementById("confirmation").value;
+          if (mdp.length < 4) { afficherMessage("Mot de passe : 4 caractères minimum.", "erreur"); return; }
+          if (mdp !== confirmation) { afficherMessage("Les mots de passe ne correspondent pas.", "erreur"); return; }
+
+          // Le compte existe déjà ?
+          const { data: existant, error: e1 } = await db.from("comptes").select("email").eq("email", email).maybeSingle();
+          if (e1) { afficherMessage("Erreur de connexion. Réessaie.", "erreur"); return; }
+          if (existant) { afficherMessage("Ce compte existe déjà. Connecte-toi.", "erreur"); return; }
+
+          // On crée le compte
+          const { error: e2 } = await db.from("comptes").insert({ email: email, motdepasse: mdp });
+          if (e2) { afficherMessage("Erreur à la création. Réessaie.", "erreur"); return; }
+          afficherMessage("Compte créé ! Connexion…", "ok");
+          setTimeout(() => connecter(email), 600);
+        } else {
+          const { data, error } = await db.from("comptes").select("motdepasse").eq("email", email).maybeSingle();
+          if (error) { afficherMessage("Erreur de connexion. Réessaie.", "erreur"); return; }
+          if (!data) { afficherMessage("Aucun compte avec cet e-mail.", "erreur"); return; }
+          if (data.motdepasse !== mdp) { afficherMessage("Mot de passe incorrect.", "erreur"); return; }
+          connecter(email);
+        }
+      } finally {
+        bouton.disabled = false;
+      }
     }
 
     function connecter(email) {
@@ -145,11 +191,12 @@
       emailActuel = null;
       document.getElementById("email").value = "";
       document.getElementById("motdepasse").value = "";
+      document.getElementById("confirmation").value = "";
       document.getElementById("zone").value = "";
       document.getElementById("carte").classList.remove("large");
       document.getElementById("formulaire").style.display = "block";
       document.getElementById("espace").style.display = "none";
-      afficherMessage("", "");
+      changerMode("connexion");
     }
 
     async function afficherEspace(email) {
@@ -162,7 +209,7 @@
       await chargerContenu();
     }
 
-    // ------- Charger le contenu depuis la mémoire partagée -------
+    // ------- Charger le contenu depuis la base -------
     async function chargerContenu() {
       const statut = document.getElementById("statut");
       statut.textContent = "Chargement…";
@@ -174,7 +221,7 @@
       statut.className = "statut enregistre";
     }
 
-    // ------- Enregistrer (automatiquement, 0,8 s après avoir arrêté d'écrire) -------
+    // ------- Enregistrer automatiquement (0,8 s après avoir arrêté d'écrire) -------
     function planifierEnregistrement() {
       const statut = document.getElementById("statut");
       statut.textContent = "…";
@@ -197,14 +244,14 @@
 
     document.getElementById("zone").addEventListener("input", planifierEnregistrement);
 
-    // Quand tu reviens sur la page (ex: tu repasses du PC au tél), on recharge le dernier contenu
+    // Quand tu reviens sur la page (ex: PC -> tél), on recharge le dernier contenu
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden && emailActuel) chargerContenu();
     });
 
     // Si déjà connecté, on va direct sur l'espace
     const dejaConnecte = localStorage.getItem("wsel_connecte");
-    if (dejaConnecte && COMPTES[dejaConnecte] !== undefined) afficherEspace(dejaConnecte);
+    if (dejaConnecte) afficherEspace(dejaConnecte);
   </script>
 </body>
 </html>
